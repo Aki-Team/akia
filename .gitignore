@@ -1,0 +1,24 @@
+# 编译产物
+build/
+out/
+*.class
+*.jar
+
+# Gradle 缓存
+.gradle/
+gradle/wrapper/gradle-wrapper.jar
+gradlew
+gradlew.bat
+
+# 运行环境（服务器数据、日志、配置、插件）
+run/
+*.log
+
+# IDE 配置
+.idea/
+*.iml
+.vscode/
+
+# 本地测试插件的 JAR（源码在 src 中，编译产物不提交）
+**/*.jar
+!build.gradle
