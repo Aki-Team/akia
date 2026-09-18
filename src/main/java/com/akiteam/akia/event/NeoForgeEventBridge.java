@@ -23,6 +23,14 @@ import net.neoforged.neoforge.event.entity.player.PlayerNegotiationEvent;
 import net.neoforged.neoforge.event.level.BlockEvent.BreakEvent;
 import net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent;
 import net.neoforged.neoforge.event.level.ExplosionEvent.Detonate;
+import net.neoforged.neoforge.event.entity.item.ItemTossEvent;
+import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
+import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent.Finish;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.EntityInteract;
+import net.neoforged.neoforge.event.entity.player.PlayerXpEvent.XpChange;
+import net.neoforged.neoforge.event.entity.player.PlayerXpEvent.LevelChange;
+import net.minecraft.world.entity.player.Player;
 
 /**
  * NeoForge → Akia 的事件桥接器（实现约定中的“方案 A：直接监听”）。
@@ -228,6 +236,79 @@ public final class NeoForgeEventBridge {
     public void onPlayerNegotiation(PlayerNegotiationEvent event) {
         event.enqueueWork(() -> safe(() -> eventBus.fireEvent(
                 new com.akiteam.akia.event.PlayerNegotiationEvent(event))));
+    }
+
+    /**
+     * 玩家丢出物品事件 → {@link PlayerDropItemEvent}。
+     */
+    @SubscribeEvent
+    public void onItemToss(ItemTossEvent event) {
+        safe(() -> eventBus.fireEvent(new PlayerDropItemEvent(event)));
+    }
+
+    /**
+     * 玩家传送事件 → {@link PlayerTeleportEvent}（仅当传送主体为玩家）。
+     */
+    @SubscribeEvent
+    public void onEntityTeleport(EntityTeleportEvent event) {
+        safe(() -> {
+            if (event.getEntity() instanceof Player) {
+                eventBus.fireEvent(new PlayerTeleportEvent(event));
+            }
+        });
+    }
+
+    /**
+     * 玩家死亡掉落事件 → {@link PlayerDeathEvent}（仅当死亡主体为玩家）。
+     * <p>
+     * 对应 NeoForge 的 {@code LivingDropsEvent}；任务七的 {@code EntityDeathEvent}
+     * 已占用 {@code LivingDeathEvent}，故死亡本体事件不再重复桥接。
+     */
+    @SubscribeEvent
+    public void onLivingDrops(LivingDropsEvent event) {
+        safe(() -> {
+            if (event.getEntity() instanceof Player) {
+                eventBus.fireEvent(new PlayerDeathEvent(event));
+            }
+        });
+    }
+
+    /**
+     * 玩家进食/饮用完物品事件 → {@link PlayerItemConsumeEvent}（仅当使用主体为玩家）。
+     * <p>
+     * 对应 NeoForge 的 {@code LivingEntityUseItemEvent.Finish}。
+     */
+    @SubscribeEvent
+    public void onLivingEntityUseItemFinish(Finish event) {
+        safe(() -> {
+            if (event.getEntity() instanceof Player) {
+                eventBus.fireEvent(new PlayerItemConsumeEvent(event));
+            }
+        });
+    }
+
+    /**
+     * 玩家右键实体事件 → {@link PlayerInteractEntityEvent}。
+     */
+    @SubscribeEvent
+    public void onPlayerInteractEntity(EntityInteract event) {
+        safe(() -> eventBus.fireEvent(new PlayerInteractEntityEvent(event)));
+    }
+
+    /**
+     * 玩家经验条变化事件 → {@link PlayerExpChangeEvent}。
+     */
+    @SubscribeEvent
+    public void onPlayerXpChange(XpChange event) {
+        safe(() -> eventBus.fireEvent(new PlayerExpChangeEvent(event)));
+    }
+
+    /**
+     * 玩家经验等级变化事件 → {@link PlayerLevelChangeEvent}。
+     */
+    @SubscribeEvent
+    public void onPlayerLevelChange(LevelChange event) {
+        safe(() -> eventBus.fireEvent(new PlayerLevelChangeEvent(event)));
     }
 
     /**
