@@ -48,6 +48,12 @@ public final class ServiceRegistryImpl implements ServiceRegistry {
     /** 服务类型 → 订阅该类型的监听器列表。 */
     private final Map<Class<?>, CopyOnWriteArrayList<WatchEntry>> watchers = new ConcurrentHashMap<>();
 
+    /** 命名服务：名字 → 单个服务条目（{provider, plugin, priority, version}）。 */
+    private final Map<String, NamedService> namedServices = new ConcurrentHashMap<>();
+
+    /** 命名服务名字 → 订阅该名字的监听器列表。 */
+    private final Map<String, CopyOnWriteArrayList<NamedWatchEntry>> namedWatchers = new ConcurrentHashMap<>();
+
     /** 服务生命周期事件分发到的事件总线（与插件共享）。 */
     private final EventBus eventBus;
 
@@ -210,6 +216,60 @@ public final class ServiceRegistryImpl implements ServiceRegistry {
         return ServiceGraph.snapshot(services);
     }
 
+    // ------------------------------------------------------------------ 命名服务
+
+    @Override
+    public void registerNamed(String name, Object provider, AkiPlugin plugin) {
+        if (name == null || name.isEmpty() || provider == null || plugin == null) {
+            LOGGER.warn("Rejected invalid named service registration (name={}, plugin={}).",
+                    name, plugin == null ? null : plugin.getName());
+            return;
+        }
+        NamedService neu = new NamedService(provider, plugin,
+                ServicePriority.Normal, RegisteredServiceProvider.DEFAULT_VERSION);
+        // ConcurrentHashMap.put 原子返回旧值，天然满足"取出旧条目 + 覆盖"的原子性
+        NamedService old = namedServices.put(name, neu);
+        if (old == null) {
+            LOGGER.info("Named service '{}' registered by plugin '{}'.", name, plugin.getName());
+            notifyNamedRegistered(name, neu);
+        } else {
+            LOGGER.info("Named service '{}' replaced by plugin '{}' (was registered by '{}').",
+                    name, plugin.getName(), old.plugin.getName());
+            notifyNamedReplaced(name, old, neu);
+        }
+    }
+
+    @Override
+    public Object getNamed(String name) {
+        if (name == null) {
+            return null;
+        }
+        NamedService s = namedServices.get(name);
+        return s == null ? null : s.provider;
+    }
+
+    @Override
+    public <T> ServiceWatch watchNamed(String name, AkiPlugin plugin, ServiceWatcher<T> watcher) {
+        if (name == null || plugin == null || watcher == null) {
+            LOGGER.warn("Rejected invalid named service watch (name={}, plugin={}).",
+                    name, plugin == null ? null : plugin.getName());
+            return InactiveWatch.INSTANCE;
+        }
+        NamedWatchEntry entry = new NamedWatchEntry(plugin, name, watcher);
+        namedWatchers.computeIfAbsent(name, k -> new CopyOnWriteArrayList<>()).add(entry);
+        return entry;
+    }
+
+    @Override
+    public boolean isNamedRegistered(String name) {
+        return name != null && namedServices.containsKey(name);
+    }
+
+    @Override
+    public Set<String> getNamedServiceNames() {
+        return new HashSet<>(namedServices.keySet());
+    }
+
     @Override
     public void unregisterAll(AkiPlugin plugin) {
         if (plugin == null) {
@@ -262,6 +322,15 @@ public final class ServiceRegistryImpl implements ServiceRegistry {
 
         // 清理该插件注册的所有 watch（卸载时的自动清理）
         cancelWatchersOf(plugin);
+
+        // 清理命名服务：移除该插件注册的全部命名服务并通知订阅者；取消该插件的命名 watch
+        for (Map.Entry<String, NamedService> e : namedServices.entrySet()) {
+            if (e.getValue().plugin == plugin) {
+                namedServices.remove(e.getKey(), e.getValue());
+                notifyNamedUnregistered(e.getKey(), e.getValue());
+            }
+        }
+        cancelNamedWatchersOf(plugin);
 
         int total = removedByType.values().stream().mapToInt(List::size).sum();
         if (total > 0) {
@@ -403,6 +472,136 @@ public final class ServiceRegistryImpl implements ServiceRegistry {
                 }
                 return false;
             });
+        }
+    }
+
+    // ---------------------------------------------------------------- 命名服务内部
+
+    /** 命名服务条目：{provider, plugin, priority, version}。 */
+    private static final class NamedService {
+        final Object provider;
+        final AkiPlugin plugin;
+        final ServicePriority priority;
+        final String version;
+
+        NamedService(Object provider, AkiPlugin plugin, ServicePriority priority, String version) {
+            this.provider = provider;
+            this.plugin = plugin;
+            this.priority = priority;
+            this.version = version;
+        }
+    }
+
+    private void notifyNamedRegistered(String name, NamedService s) {
+        CopyOnWriteArrayList<NamedWatchEntry> list = namedWatchers.get(name);
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        for (NamedWatchEntry e : list) {
+            if (!e.active) {
+                continue;
+            }
+            try {
+                e.fireRegistered(s);
+            } catch (Exception ex) {
+                LOGGER.error("Error notifying named-service watcher from plugin '{}'.", e.plugin.getName(), ex);
+            }
+        }
+    }
+
+    private void notifyNamedUnregistered(String name, NamedService s) {
+        CopyOnWriteArrayList<NamedWatchEntry> list = namedWatchers.get(name);
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        for (NamedWatchEntry e : list) {
+            if (!e.active) {
+                continue;
+            }
+            try {
+                e.fireUnregistered(s);
+            } catch (Exception ex) {
+                LOGGER.error("Error notifying named-service watcher from plugin '{}'.", e.plugin.getName(), ex);
+            }
+        }
+    }
+
+    private void notifyNamedReplaced(String name, NamedService oldS, NamedService newS) {
+        CopyOnWriteArrayList<NamedWatchEntry> list = namedWatchers.get(name);
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        for (NamedWatchEntry e : list) {
+            if (!e.active) {
+                continue;
+            }
+            try {
+                e.fireReplaced(oldS, newS);
+            } catch (Exception ex) {
+                LOGGER.error("Error notifying named-service watcher from plugin '{}'.", e.plugin.getName(), ex);
+            }
+        }
+    }
+
+    private void cancelNamedWatchersOf(AkiPlugin plugin) {
+        for (CopyOnWriteArrayList<NamedWatchEntry> list : namedWatchers.values()) {
+            list.removeIf(e -> {
+                if (e.plugin == plugin) {
+                    e.active = false;
+                    return true;
+                }
+                return false;
+            });
+        }
+    }
+
+    /** 一个已注册的命名服务订阅项。调用 {@link #cancel()} 后不再接收回调。 */
+    private final class NamedWatchEntry implements ServiceWatch {
+        private final AkiPlugin plugin;
+        private final String name;
+        private final ServiceWatcher<?> watcher;
+        private volatile boolean active = true;
+
+        NamedWatchEntry(AkiPlugin plugin, String name, ServiceWatcher<?> watcher) {
+            this.plugin = plugin;
+            this.name = name;
+            this.watcher = watcher;
+        }
+
+        @Override
+        public void cancel() {
+            active = false;
+            CopyOnWriteArrayList<NamedWatchEntry> list = namedWatchers.get(name);
+            if (list != null) {
+                list.remove(this);
+            }
+        }
+
+        @Override
+        public boolean isActive() {
+            return active;
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        void fireRegistered(NamedService s) {
+            ((ServiceWatcher) watcher).onServiceRegistered(wrap(s));
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        void fireUnregistered(NamedService s) {
+            ((ServiceWatcher) watcher).onServiceUnregistered(wrap(s));
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        void fireReplaced(NamedService oldS, NamedService newS) {
+            ((ServiceWatcher) watcher).onServiceReplaced(wrap(oldS), wrap(newS));
+        }
+
+        /** 把命名服务条目包装成 {@link RegisteredServiceProvider}（serviceClass 取实例实际类型）。 */
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private RegisteredServiceProvider wrap(NamedService s) {
+            return new RegisteredServiceProvider((Class) s.provider.getClass(),
+                    s.provider, s.plugin, s.priority, s.version);
         }
     }
 

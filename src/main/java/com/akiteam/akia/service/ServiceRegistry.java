@@ -184,4 +184,66 @@ public interface ServiceRegistry {
      * @return 服务图快照
      */
     ServiceGraph getServiceGraph();
+
+    // ------------------------------------------------------------------ 命名服务
+
+    /**
+     * 以默认优先级 {@link ServicePriority#Normal} 按名字注册一个服务。
+     * <p>
+     * 与 {@link #register(Class, Object, AkiPlugin)} 不同，命名服务不依赖接口类型，而是
+     * 用一个字符串标识一个 {@link Object} 实例——适用于"模组 ↔ 插件"或"跨插件"之间按
+     * 名字通信（模组不知道插件定义的接口类型）。同名重复注册会<b>覆盖</b>旧值，且该名字的
+     * 归属权前移到本次注册的插件。
+     *
+     * @param name     服务名字（不为 {@code null} 或空字符串）
+     * @param provider 服务实例（可为任意 {@link Object}；不为 {@code null}）
+     * @param plugin   注册该服务的插件（卸载时据此自动清理，不为 {@code null}）
+     */
+    void registerNamed(String name, Object provider, AkiPlugin plugin);
+
+    /**
+     * 按名字获取服务实例。
+     * <p>
+     * 不存在时返回 {@code null}，不抛异常（与 {@link #get(Class)} 一致）。
+     *
+     * @param name 服务名字
+     * @return 该名字对应的服务实例，或 {@code null}
+     */
+    Object getNamed(String name);
+
+    /**
+     * 订阅某名字服务，实时感知其注册 / 注销 / 替换（重点解决插件与模组的加载顺序问题）。
+     * <p>
+     * 返回一个 {@link ServiceWatch} 句柄用于取消；当注册该监听的插件被卸载 / 重载时，
+     * 该监听会自动被清理，无需插件手动取消。
+     * <p>
+     * <b>回调时机</b>：仅在订阅之后发生的变化才会触发回调；对订阅前已存在的命名服务
+     * 不会立即回调（如需当前值请用 {@link #getNamed}）。
+     * <p>
+     * <b>回调负载</b>：命名服务存的是 {@link Object}（模组不知道其类型），故回调参数
+     * 统一包装成 {@link RegisteredServiceProvider}，其 {@code serviceClass} 取服务实例的
+     * 实际类型（best-effort）。通常只需关注 {@link RegisteredServiceProvider#getProvider()}。
+     *
+     * @param name    要订阅的服务名字
+     * @param plugin  拥有该监听的插件（用于卸载时自动清理，不可为 {@code null}）
+     * @param watcher 监听回调
+     * @param <T>     泛型参数（回调负载类型按 {@code Object} 处理）
+     * @return 监听句柄
+     */
+    <T> ServiceWatch watchNamed(String name, AkiPlugin plugin, ServiceWatcher<T> watcher);
+
+    /**
+     * 判断某个名字是否已有注册的服务。
+     *
+     * @param name 服务名字
+     * @return {@code true} 表示该名字当前已注册；{@code name} 为 {@code null} 时返回 {@code false}
+     */
+    boolean isNamedRegistered(String name);
+
+    /**
+     * 获取全部已注册的命名服务名字（服务发现）。
+     *
+     * @return 名字集合（可能为空，不为 {@code null}）
+     */
+    Set<String> getNamedServiceNames();
 }
