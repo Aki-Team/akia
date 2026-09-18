@@ -30,6 +30,9 @@ import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent.Finis
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.EntityInteract;
 import net.neoforged.neoforge.event.entity.player.PlayerXpEvent.XpChange;
 import net.neoforged.neoforge.event.entity.player.PlayerXpEvent.LevelChange;
+import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
+import net.neoforged.neoforge.event.level.ChunkEvent;
+import net.neoforged.neoforge.event.level.LevelEvent;
 import net.minecraft.world.entity.player.Player;
 
 /**
@@ -309,6 +312,54 @@ public final class NeoForgeEventBridge {
     @SubscribeEvent
     public void onPlayerLevelChange(LevelChange event) {
         safe(() -> eventBus.fireEvent(new PlayerLevelChangeEvent(event)));
+    }
+
+    /**
+     * 抛射物命中事件 → {@link ProjectileHitEvent}。
+     */
+    @SubscribeEvent
+    public void onProjectileImpact(ProjectileImpactEvent event) {
+        safe(() -> eventBus.fireEvent(new ProjectileHitEvent(event)));
+    }
+
+    /**
+     * 区块加载事件 → {@link ChunkLoadEvent}。
+     */
+    @SubscribeEvent
+    public void onChunkLoad(ChunkEvent.Load event) {
+        safe(() -> eventBus.fireEvent(new ChunkLoadEvent(event)));
+    }
+
+    /**
+     * 区块卸载事件 → {@link ChunkUnloadEvent}。
+     */
+    @SubscribeEvent
+    public void onChunkUnload(ChunkEvent.Unload event) {
+        safe(() -> eventBus.fireEvent(new ChunkUnloadEvent(event)));
+    }
+
+    /**
+     * 世界（维度）加载事件 → {@link WorldLoadEvent}。
+     */
+    @SubscribeEvent
+    public void onLevelLoad(LevelEvent.Load event) {
+        safe(() -> eventBus.fireEvent(new WorldLoadEvent(event)));
+    }
+
+    /**
+     * 世界（维度）保存事件 → {@link WorldSaveEvent}。
+     */
+    @SubscribeEvent
+    public void onLevelSave(LevelEvent.Save event) {
+        safe(() -> eventBus.fireEvent(new WorldSaveEvent(event)));
+    }
+
+    /**
+     * 世界（维度）卸载事件 → {@link WorldUnloadEvent}。
+     */
+    @SubscribeEvent
+    public void onLevelUnload(LevelEvent.Unload event) {
+        safe(() -> eventBus.fireEvent(new WorldUnloadEvent(event)));
     }
 
     /**
