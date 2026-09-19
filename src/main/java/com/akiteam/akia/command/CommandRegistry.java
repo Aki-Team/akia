@@ -71,23 +71,33 @@ public final class CommandRegistry {
 
     /**
      * 登记一条命令，权限等级使用默认值 {@link #DEFAULT_PERMISSION_LEVEL}。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String)} 构建多级命令树，
+     *             无参数字面量命令用 {@code registerNode(name).executes(...)} 实现。
      * @param name     命令名（可带或不带开头的 {@code /}）
      * @param executor 命令执行器
      * @return {@code true} 登记成功；命令名为空或已登记同名命令时返回 {@code false}
      */
+    @Deprecated
     public boolean register(String name, CommandExecutor executor) {
         return register(name, executor, DEFAULT_PERMISSION_LEVEL);
     }
 
     /**
      * 登记一条命令，并指定执行所需的权限等级。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String, int)} 构建多级命令树，
+     *             无参数字面量命令用 {@code registerNode(name, level).executes(...)} 实现。
      * @param name            命令名（可带或不带开头的 {@code /}）
      * @param executor        命令执行器
      * @param permissionLevel 所需权限等级（0 任何玩家，2 及以上需要 OP）
      * @return {@code true} 登记成功；命令名、执行器为空或已登记同名命令时返回 {@code false}
      */
+    @Deprecated
     public boolean register(String name, CommandExecutor executor, int permissionLevel) {
         String label = stripSlash(name);
         if (label.isEmpty() || executor == null) {
@@ -108,12 +118,16 @@ public final class CommandRegistry {
      * <p>
      * 执行前框架会用执行命令的 {@link CommandSourceStack} 校验该节点；
      * 当前无外挂权限插件，节点默认退化为 OP 身份校验（非 OP 玩家将被拦截）。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String, String)} 构建多级命令树。
      * @param name       命令名（可带或不带开头的 {@code /}）
      * @param executor   命令执行器
      * @param permission 权限节点（如 {@code "test.node"}）；为 {@code null}/{@code ""} 时不校验节点
      * @return {@code true} 登记成功；命令名、执行器为空或已登记同名命令时返回 {@code false}
      */
+    @Deprecated
     public boolean register(String name, CommandExecutor executor, String permission) {
         return register(name, executor, DEFAULT_PERMISSION_LEVEL, permission);
     }
@@ -122,13 +136,17 @@ public final class CommandRegistry {
      * 登记一条命令，并同时指定权限等级与<b>字符串权限节点</b>。
      * <p>
      * 执行前框架会先校验 {@code permissionLevel}，再校验 {@code permission} 节点（二者都要满足）。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String, int, String)} 构建多级命令树。
      * @param name            命令名（可带或不带开头的 {@code /}）
      * @param executor        命令执行器
      * @param permissionLevel 所需权限等级（0 任何玩家，2 及以上需要 OP）
      * @param permission      权限节点（如 {@code "test.node"}）；为 {@code null}/{@code ""} 时不校验节点
      * @return {@code true} 登记成功；命令名、执行器为空或已登记同名命令时返回 {@code false}
      */
+    @Deprecated
     public boolean register(String name, CommandExecutor executor, int permissionLevel, String permission) {
         String label = stripSlash(name);
         if (label.isEmpty() || executor == null) {
@@ -151,25 +169,36 @@ public final class CommandRegistry {
      * 参数名用于在执行器中通过 {@code ctx.getArgument(name, String.class)} 取回输入，
      * 例如 {@code /color hello world} 会取回 {@code "hello world"}。参数必须是命令名的最后一个
      * 子节点，因此命令执行器里不能再用该参数名登记子命令。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}：带贪心字符串参数
+     * 的命令用 {@code registerNode(name).sub(...).arg(name, StringArgumentType.greedyString(), ...)}。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String)} 构建多级命令树，
+     *             用 {@code arg} 挂类型化参数（如 {@code StringArgumentType.greedyString()}）。
      * @param name         命令名（可带或不带开头的 {@code /}）
      * @param argumentName 参数名（将在执行器中作为 key 使用）
      * @param executor     命令执行器
      * @return {@code true} 登记成功
      */
+    @Deprecated
     public boolean registerArgument(String name, String argumentName, CommandExecutor executor) {
         return registerArgument(name, argumentName, executor, DEFAULT_PERMISSION_LEVEL);
     }
 
     /**
      * 登记一条带贪心字符串参数的命令，并指定权限等级。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String, int)} 构建多级命令树，
+     *             用 {@code arg} 挂类型化参数。
      * @param name            命令名
      * @param argumentName    参数名
      * @param executor        命令执行器
      * @param permissionLevel 所需权限等级
      * @return {@code true} 登记成功；名称/参数/执行器非法或重名时返回 {@code false}
      */
+    @Deprecated
     public boolean registerArgument(String name, String argumentName, CommandExecutor executor, int permissionLevel) {
         String label = stripSlash(name);
         if (label.isEmpty() || argumentName == null || argumentName.isEmpty() || executor == null) {
@@ -188,20 +217,29 @@ public final class CommandRegistry {
 
     /**
      * 登记一条带贪心字符串参数的命令，并指定<b>字符串权限节点</b>。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String, String)} 构建多级命令树，
+     *             用 {@code arg} 挂类型化参数。
      * @param name         命令名
      * @param argumentName 参数名
      * @param executor     命令执行器
      * @param permission   权限节点；为 {@code null}/{@code ""} 时不校验节点
      * @return {@code true} 登记成功
      */
+    @Deprecated
     public boolean registerArgument(String name, String argumentName, CommandExecutor executor, String permission) {
         return registerArgument(name, argumentName, executor, DEFAULT_PERMISSION_LEVEL, permission);
     }
 
     /**
      * 登记一条带贪心字符串参数的命令，并同时指定权限等级与<b>字符串权限节点</b>。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String, int, String)} 构建多级命令树，
+     *             用 {@code arg} 挂类型化参数。
      * @param name            命令名
      * @param argumentName    参数名
      * @param executor        命令执行器
@@ -209,6 +247,7 @@ public final class CommandRegistry {
      * @param permission      权限节点；为 {@code null}/{@code ""} 时不校验节点
      * @return {@code true} 登记成功；名称/参数/执行器非法或重名时返回 {@code false}
      */
+    @Deprecated
     public boolean registerArgument(String name, String argumentName, CommandExecutor executor,
                                     int permissionLevel, String permission) {
         String label = stripSlash(name);
@@ -232,13 +271,19 @@ public final class CommandRegistry {
      * 与 {@link #registerArgument(String, String, CommandExecutor)} 等价，只是额外提供
      * {@link AkiCommandSuggestion}：玩家输入命令名后按 Tab 即可补全 {@code suggestion}
      * 返回的候选值。执行器读取参数的方式不变（{@code ctx.getArgument(name, String.class)}）。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}：该接口本身容易导致
+     * "子命令菜单补全失灵"，请改用 {@link #registerNode(String)} 的层级树或 {@code arg} 类型化参数补全。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String)} 构建层级命令树，
+     *             或配合类型化参数（{@code arg}）做原生补全。
      * @param name         命令名（可带或不带开头的 {@code /}）
      * @param argumentName 参数名（将在执行器中作为 key 使用）
      * @param executor     命令执行器
      * @param suggestion   Tab 补全提供者
      * @return {@code true} 登记成功
      */
+    @Deprecated
     public boolean registerArgumentSuggestions(String name, String argumentName,
                                                CommandExecutor executor, AkiCommandSuggestion suggestion) {
         return registerArgumentSuggestions(name, argumentName, executor, suggestion, DEFAULT_PERMISSION_LEVEL);
@@ -246,7 +291,11 @@ public final class CommandRegistry {
 
     /**
      * 登记一条带贪心字符串参数和 Tab 补全的命令，并指定权限等级。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String, int)} 构建层级命令树，
+     *             或配合类型化参数（{@code arg}）做原生补全。
      * @param name            命令名
      * @param argumentName    参数名
      * @param executor        命令执行器
@@ -254,6 +303,7 @@ public final class CommandRegistry {
      * @param permissionLevel 所需权限等级
      * @return {@code true} 登记成功；名称/参数/执行器非法或重名时返回 {@code false}
      */
+    @Deprecated
     public boolean registerArgumentSuggestions(String name, String argumentName, CommandExecutor executor,
                                                AkiCommandSuggestion suggestion, int permissionLevel) {
         String label = stripSlash(name);
@@ -274,7 +324,11 @@ public final class CommandRegistry {
 
     /**
      * 登记一条带贪心字符串参数和 Tab 补全的命令，并指定<b>字符串权限节点</b>。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String, String)} 构建层级命令树，
+     *             或配合类型化参数（{@code arg}）做原生补全。
      * @param name         命令名
      * @param argumentName 参数名
      * @param executor     命令执行器
@@ -282,6 +336,7 @@ public final class CommandRegistry {
      * @param permission   权限节点；为 {@code null}/{@code ""} 时不校验节点
      * @return {@code true} 登记成功
      */
+    @Deprecated
     public boolean registerArgumentSuggestions(String name, String argumentName, CommandExecutor executor,
                                                AkiCommandSuggestion suggestion, String permission) {
         return registerArgumentSuggestions(name, argumentName, executor, suggestion, DEFAULT_PERMISSION_LEVEL, permission);
@@ -289,7 +344,11 @@ public final class CommandRegistry {
 
     /**
      * 登记一条带贪心字符串参数和 Tab 补全的命令，并同时指定权限等级与<b>字符串权限节点</b>。
+     * <p>
+     * 本方法<b>仍可用</b>（旧插件无需改动），但新代码请改用 {@code registerNode}。
      *
+     * @deprecated 已过时，请使用 {@link #registerNode(String, int, String)} 构建层级命令树，
+     *             或配合类型化参数（{@code arg}）做原生补全。
      * @param name            命令名
      * @param argumentName    参数名
      * @param executor        命令执行器
@@ -298,6 +357,7 @@ public final class CommandRegistry {
      * @param permission      权限节点；为 {@code null}/{@code ""} 时不校验节点
      * @return {@code true} 登记成功；名称/参数/执行器非法或重名时返回 {@code false}
      */
+    @Deprecated
     public boolean registerArgumentSuggestions(String name, String argumentName, CommandExecutor executor,
                                                AkiCommandSuggestion suggestion, int permissionLevel, String permission) {
         String label = stripSlash(name);

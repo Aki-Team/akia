@@ -1,5 +1,6 @@
 package com.akiteam.akia.command;
 
+import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -21,13 +22,24 @@ import java.util.List;
  *   .sub("all", execAllToggle)
  *     .child("on", execAllOn).child("off", execAllOff); // all 后二级 on/off（各自执行器）
  * }</pre>
+ * 带类型化参数的子命令（{@code /et hurt <整数>}）：{@code hurt} 是子命令字面量，
+ * {@code damage} 是整数参数名，vanilla 会自动提示 {@code <integer>}，无需手动塞候选：
+ * <pre>{@code
+ * NodeBuilder et = registry.registerNode("et");
+ * et.sub("hurt").arg("damage", IntegerArgumentType.integer(),
+ *         ctx -> { int dmg = ctx.getArgument("damage", Integer.class); ... });
+ * }</pre>
  * <ul>
  *     <li>{@link #sub(String, CommandExecutor)} —— 在当前命令的<b>顶级</b>加字面量子命令；</li>
+ *     <li>{@link #sub(String)} —— 加一个<b>无执行器</b>的子命令字面量，供其下挂类型化参数等子节点；</li>
  *     <li>{@link #child(String, CommandExecutor)} —— 在<b>最近一次 {@code sub} 的节点</b>下加可执行的子命令；</li>
+ *     <li>{@link #arg(String, ArgumentType, CommandExecutor)} —— 在最近一次 {@code sub} 的节点下加
+ *         <b>类型化参数</b>叶子，参数类型由 {@code type} 决定（vanilla 自动补全提示）；</li>
  *     <li>{@link #suggest(String...)} —— 在最近一次 {@code sub} 的节点下加<b>仅用于补全</b>的字面量叶子；</li>
  *     <li>{@link #executes(CommandExecutor)} —— 设置命令无子命令匹配时的默认执行器。</li>
  * </ul>
- * 权限：{@link #sub}/{@link #child} 可覆盖该节点的权限等级与字符串权限节点，缺省继承根命令的。
+ * 权限：{@link #sub}/{@link #child}/{@link #arg} 可覆盖该节点的权限等级与字符串权限节点，
+ * 缺省继承根命令的。注意 {@code arg} 是命令最后一级，下面不要再挂子节点（Brigadier 限制）。
  */
 public final class NodeBuilder {
 
@@ -72,6 +84,38 @@ public final class NodeBuilder {
 
     boolean isRegisterable() {
         return registerable;
+    }
+
+    /**
+     * 在命令<b>顶级</b>登记一个或多个<b>无执行器</b>的字面量子命令（{@code names} 可用 {@code |}
+     * 分隔多个名字），供其下挂类型化参数等子节点（如 {@code sub("hurt").arg("damage", ...)}）。
+     * 权限继承根命令的。
+     *
+     * @return 本构建器（链式）
+     */
+    public NodeBuilder sub(String names) {
+        return sub(names, rootPermLevel, rootPermNode);
+    }
+
+    /**
+     * 在命令顶级登记无执行器的字面量子命令，并为该节点单独指定权限等级与字符串权限节点。
+     * <p>
+     * 注意：由于该 sub 无执行器，其下必须通过 {@link #arg} 挂至少一个类型化参数叶子，
+     * 否则玩家执行该子命令会因无从匹配而触发根命令默认执行器（若有）或提示错误。
+     */
+    public NodeBuilder sub(String names, int permissionLevel, String permission) {
+        if (!registerable || names == null) {
+            return this;
+        }
+        lastBranch.clear();
+        for (String name : split(names)) {
+            LiteralArgumentBuilder<CommandSourceStack> child = Commands.literal(name)
+                    .requires(s -> CommandRegistry.checkPermissions(s, permissionLevel, permission));
+            // 不立即挂到 root，等 build() 最后一并挂载，避免后续 arg()/child()/suggest() 的孙级丢失
+            rootChildren.add(child);
+            lastBranch.add(child);
+        }
+        return this;
     }
 
     /**
@@ -143,6 +187,40 @@ public final class NodeBuilder {
                 branch.then(Commands.literal(candidate)
                         .requires(s -> CommandRegistry.checkPermissions(s, rootPermLevel, rootPermNode)));
             }
+        }
+        return this;
+    }
+
+    /**
+     * 在最近一次 {@code sub} 的节点下挂一个<b>类型化参数</b>叶子：
+     * {@code branch.then(Commands.argument(name, type).executes(...))}。
+     * <p>
+     * 参数类型决定 vanilla Tab 补全的呈现（如 {@code IntegerArgumentType.integer()}
+     * 自动显示 {@code <integer>}），无需手动塞候选占位。
+     *
+     * @param argumentName 参数名（执行器用 {@code ctx.getArgument(argumentName, ...)} 取回）
+     * @param type         参数类型（{@link ArgumentType}，如整数/字符串/枚举等）
+     * @param executor     该参数路径下的执行器
+     * @return 本构建器（链式）
+     */
+    public NodeBuilder arg(String argumentName, ArgumentType<?> type, CommandExecutor executor) {
+        return arg(argumentName, type, executor, rootPermLevel, rootPermNode);
+    }
+
+    /**
+     * 在最近一次 {@code sub} 的节点下挂类型化参数叶子，并指定该参数节点的权限等级与字符串权限节点。
+     * <p>
+     * 注意：参数叶子是命令的最后一级，下面不要再挂子节点（Brigadier 限制）。
+     */
+    public NodeBuilder arg(String argumentName, ArgumentType<?> type, CommandExecutor executor,
+                           int permissionLevel, String permission) {
+        if (!registerable || argumentName == null || argumentName.isEmpty() || type == null || executor == null) {
+            return this;
+        }
+        for (LiteralArgumentBuilder<CommandSourceStack> branch : lastBranch) {
+            branch.then(Commands.argument(argumentName, type)
+                    .requires(s -> CommandRegistry.checkPermissions(s, permissionLevel, permission))
+                    .executes(ctx -> executor.execute(ctx)));
         }
         return this;
     }
