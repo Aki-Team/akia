@@ -7,7 +7,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.food.FoodData;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 
@@ -19,8 +18,9 @@ import java.util.UUID;
  * 包装 {@link ServerPlayer}，向插件提供 Bukkit 开发者熟悉的 API：读玩家属性、
  * 发消息、传送、踢出、切模式、发经验、设置坐标。
  * <p>
- * 涉及 World / ItemStack / Inventory / FoodData 的返回值按约定暂返原生类型，
- * 由后续任务再行包装。玩家操作须在服务端线程调用。
+ * 常用对象均返回框架包装版（World / ItemStack / Inventory / Location）；
+ * FoodData / Component / ServerLevel / MinecraftServer 等暂返原生逃生类型。
+ * 玩家操作须在服务端线程调用。
  */
 public final class Player {
 
@@ -57,6 +57,35 @@ public final class Player {
 
     public boolean isAlive() {
         return handle.isAlive();
+    }
+
+    /** 玩家是否仍在线（未断线）。 */
+    public boolean isOnline() {
+        return !handle.hasDisconnected();
+    }
+
+    /** 玩家是否具备管理员（OP）身份。 */
+    public boolean isOp() {
+        return handle.hasPermissions(handle.getServer().getOperatorUserPermissionLevel());
+    }
+
+    /**
+     * 是否具备指定权限节点。
+     * <p>
+     * 说明：Akia 当前未接入权限插件，框架的 {@link com.akiteam.akia.permission.Permissible#hasPermission}
+     * 已退化为按 OP 身份判定。此处级联同一策略：节点缺失或为空视为放行，否则按 OP 判定。
+     * 未来接入权限插件时，仅需改此方法为查询权限服务即可。
+     */
+    public boolean hasPermission(String node) {
+        if (node == null || node.isEmpty()) {
+            return true;
+        }
+        return isOp();
+    }
+
+    /** 玩家当前所在维度世界（包装版）。 */
+    public World getWorld() {
+        return World.from(handle.serverLevel());
     }
 
     public GameType getGameMode() {
@@ -100,6 +129,14 @@ public final class Player {
             return;
         }
         handle.sendSystemMessage(message.build());
+    }
+
+    /** 以纯文本形式发送一条系统消息（重载，不破坏现有 {@link #sendMessage(TextComponent)}）。 */
+    public void sendMessage(String message) {
+        if (message == null) {
+            return;
+        }
+        handle.sendSystemMessage(Component.literal(message));
     }
 
     /**
@@ -159,7 +196,7 @@ public final class Player {
         handle.setPos(x, y, z);
     }
 
-    // ---------- 暂返原生（后续任务再包装） ----------
+    // ---------- 背包 / 手持物品 / 原生逃生 ----------
 
     /**
      * 玩家的随身背包（包装为 {@link Inventory}，底层为原生
@@ -171,12 +208,14 @@ public final class Player {
         return new Inventory(handle.getInventory());
     }
 
+    /** 主手物品（包装版，视图语义）。 */
     public ItemStack getMainHandItem() {
-        return handle.getMainHandItem();
+        return new ItemStack(handle.getMainHandItem());
     }
 
+    /** 副手物品（包装版，视图语义）。 */
     public ItemStack getOffhandItem() {
-        return handle.getOffhandItem();
+        return new ItemStack(handle.getOffhandItem());
     }
 
     public FoodData getFoodData() {
