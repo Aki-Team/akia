@@ -66,4 +66,15 @@ public final class NamedTextColor {
     public TextColor toTextColor() {
         return textColor;
     }
+
+    /**
+     * 返回十六进制颜色表示（对齐 Minecraft/Paper 的 {@code #RRGGBB} 形式），
+     * 如 {@code #FF5555}。供命令回显 / 日志使用，不再打印对象地址。
+     *
+     * @return {@code #RRGGBB} 形式的颜色串（始终为大写十六进制）
+     */
+    @Override
+    public String toString() {
+        return String.format("#%06X", textColor.getValue());
+    }
 }
