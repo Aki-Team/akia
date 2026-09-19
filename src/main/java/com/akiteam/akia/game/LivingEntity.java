@@ -141,6 +141,43 @@ public class LivingEntity extends Entity {
         return m == null ? null : new LivingEntity(m);
     }
 
+    /**
+     * 最近一次伤害的<b>来源类型</b>（原生逃生口）。
+     * <p>
+     * 与 {@link #getLastHurtByMob()} 分工互补：本方法能取到<em>非活体实体直接攻击</em>造成的伤害，
+     * 如苦力怕爆炸（{@code creeper}）、摔落（{@code fall}）、末影珍珠等环境/间接伤害，
+     * 而这些 {@code getLastHurtByMob()} 拿不到。未受伤（尚未受到伤害）返回 {@code null}；
+     * 实体死亡重生后被替换，来源清空亦返回 {@code null}（属预期）。
+     *
+     * @return 原生 {@link net.minecraft.world.damagesource.DamageSource}，未受伤为 {@code null}
+     */
+    @org.jetbrains.annotations.Nullable
+    public net.minecraft.world.damagesource.DamageSource getLastDamageSource() {
+        return handle == null ? null : handle.getLastDamageSource();
+    }
+
+    /**
+     * 最近一次伤害的可读<b>类型标识</b>字符串，供聊天栏直接打印。
+     * <p>
+     * 优先返回伤害类型注册键的 ResourceLocation 字符串（形如 {@code "minecraft:creeper"}、
+     * {@code "minecraft:fall"}），取不到时回退到原生的消息 id（{@code DamageType.msgId()}）。
+     * 与 {@link #getLastHurtByMob()} 分工参见 {@link #getLastDamageSource()}。
+     *
+     * @return 可读伤害类型标识；未受伤（或来源类型无注册键且无消息 id）为 {@code null}
+     */
+    @org.jetbrains.annotations.Nullable
+    public String getLastDamageCause() {
+        net.minecraft.world.damagesource.DamageSource s = getLastDamageSource();
+        if (s == null) {
+            return null;
+        }
+        var key = s.typeHolder().unwrapKey();
+        if (key.isPresent()) {
+            return key.get().location().toString();
+        }
+        return s.type().msgId();
+    }
+
     @Override
     public String toString() {
         return "LivingEntity{" + getType() + " hp=" + getHealth() + "/" + getMaxHealth() + "}";

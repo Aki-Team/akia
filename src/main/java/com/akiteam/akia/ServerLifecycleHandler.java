@@ -111,7 +111,13 @@ public final class ServerLifecycleHandler {
                 Commands.literal("akia")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.literal("reload")
-                                .executes(ServerLifecycleHandler::executeReload))
+                                .executes(ServerLifecycleHandler::executeReload)
+                                .then(Commands.argument("plugin", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> net.minecraft.commands.SharedSuggestionProvider.suggest(
+                                                Akia.getPluginManager().getDiagnostics().stream()
+                                                        .map(PluginDiagnostic::name),
+                                                builder))
+                                        .executes(ServerLifecycleHandler::executeReloadSingle)))
                         .then(Commands.literal("list")
                                 .executes(ServerLifecycleHandler::executeList))
                         .then(Commands.literal("info")
@@ -150,6 +156,34 @@ public final class ServerLifecycleHandler {
             source.sendFailure(Component.literal("Failed to reload plugins: " + t));
         }
         return 1;
+    }
+
+    /**
+     * 执行 {@code /akia reload <plugin>}：只重载<b>一个</b>指定插件（对齐 Paper 的
+     * {@code /reload <name>}），调用 {@link PluginManagerImpl#reloadPlugin(String)}。
+     * 重载后手动把最新命令树重新下发给在线玩家，使客户端 Tab 补全 / 参数提示即时生效。
+     *
+     * @param context 命令上下文
+     * @return 命令执行结果（插件已重载返回 1，未找到或失败返回 0）
+     */
+    private static int executeReloadSingle(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        String name = StringArgumentType.getString(context, "plugin");
+        try {
+            boolean ok = Akia.getPluginManager().reloadPlugin(name);
+            if (ok) {
+                source.getServer().getPlayerList().getPlayers()
+                        .forEach(p -> source.getServer().getCommands().sendCommands(p));
+                source.sendSuccess(() -> Component.literal("Plugin '" + name + "' reloaded."), true);
+                return 1;
+            }
+            source.sendFailure(Component.literal("Failed to reload plugin '" + name + "': not loaded or error."));
+            return 0;
+        } catch (Throwable t) {
+            LOGGER.error("Failed to reload plugin '{}': {}", name, t.toString(), t);
+            source.sendFailure(Component.literal("Failed to reload plugin '" + name + "': " + t));
+            return 0;
+        }
     }
 
     /**

@@ -63,6 +63,15 @@ public final class CommandRegistry {
     private final Set<String> registeredNames = ConcurrentHashMap.newKeySet();
 
     /**
+     * 正在执行 {@code registerCommands} 的插件名；由 {@link #setCurrentOwner} 在插件登记命令前后设置。
+     * {@code null} 表示框架自己（或尚未进入任何插件的登记上下文）。
+     */
+    private volatile String currentOwner;
+
+    /** 命令名（不含 '/'）→ 该命令所属的插件名；{@code null} 归属表示框架自身。用于按插件精确清理命令。 */
+    private final ConcurrentMap<String, String> ownerByCommand = new ConcurrentHashMap<>();
+
+    /**
      * 构造注册表，并把自己注册到 NeoForge 会话事件总线以接收 {@link RegisterCommandsEvent}。
      */
     public CommandRegistry() {
@@ -159,6 +168,7 @@ public final class CommandRegistry {
             LOGGER.warn("Command '/{}' is already registered; rejected the duplicate.", label);
             return false;
         }
+        ownerByCommand.put(label, currentOwner);
         LOGGER.info("Queued registration of command '/{}'.", label);
         return true;
     }
@@ -261,6 +271,7 @@ public final class CommandRegistry {
             LOGGER.warn("Command '/{}' is already registered; rejected the duplicate.", label);
             return false;
         }
+        ownerByCommand.put(label, currentOwner);
         LOGGER.info("Queued registration of argument command '/{} <{}>'.", label, argumentName);
         return true;
     }
@@ -372,6 +383,7 @@ public final class CommandRegistry {
             LOGGER.warn("Command '/{}' is already registered; rejected the duplicate.", label);
             return false;
         }
+        ownerByCommand.put(label, currentOwner);
         LOGGER.info("Queued registration of suggestion argument command '/{} <{}>'.", label, argumentName);
         return true;
     }
@@ -428,6 +440,7 @@ public final class CommandRegistry {
             dead.markUnregisterable();
             return dead;
         }
+        ownerByCommand.put(label, currentOwner);
         LOGGER.info("Queued node command tree '/{}'.", label);
         return dead;
     }
@@ -535,11 +548,55 @@ public final class CommandRegistry {
         registeredNames.clear();
         commands.clear();
         nodeCommands.clear();
+        ownerByCommand.clear();
         LOGGER.info("Cleared all plugin commands.");
     }
 
     private String stripSlash(String name) {
         return name == null ? "" : (name.startsWith("/") ? name.substring(1) : name);
+    }
+
+    /**
+     * 设置当前正在登记命令的插件名（供 {@link PluginManagerImpl} 在调用插件
+     * {@code registerCommands} 前后包裹）。之后该插件登记的每条顶级命令都会被标记为该插件拥有。
+     *
+     * @param name 插件名；{@code null} 视为框架自身
+     */
+    public void setCurrentOwner(String name) {
+        this.currentOwner = name;
+    }
+
+    /** 清除当前命令登记所属者（回到框架自身，{@code owner = null}）。 */
+    public void clearCurrentOwner() {
+        this.currentOwner = null;
+    }
+
+    /**
+     * 仅清除<b>指定插件</b>登记的命令（及其在 dispatcher 中的已注册节点），其余插件命令一概不动。
+     * <p>
+     * 供"单项插件重载"使用：重载插件前先把它自己的命令清掉，再让插件重新登记，避免与旧命令叠加。
+     *
+     * @param ownerName 插件名；为 {@code null} 时语义等于全清（等价于 {@link #clearPluginCommands()}）
+     */
+    public void clearPluginCommands(String ownerName) {
+        CommandDispatcher<CommandSourceStack> d = this.dispatcher;
+        java.util.List<String> toRemove = new java.util.ArrayList<>();
+        for (Map.Entry<String, String> e : ownerByCommand.entrySet()) {
+            if ((ownerName == null && e.getValue() == null)
+                    || (ownerName != null && ownerName.equals(e.getValue()))) {
+                toRemove.add(e.getKey());
+            }
+        }
+        for (String label : toRemove) {
+            if (d != null) {
+                d.getRoot().getChildren().removeIf(n -> n.getName().equals(label));
+            }
+            commands.remove(label);
+            nodeCommands.remove(label);
+            ownerByCommand.remove(label);
+            registeredNames.remove(label);
+        }
+        LOGGER.info("Cleared {} command(s) owned by plugin '{}'.", toRemove.size(), ownerName);
     }
 
     /**

@@ -378,6 +378,62 @@ public class PluginManagerImpl implements PluginManager {
     }
 
     /**
+     * 仅重载<b>一个</b>指定插件（对齐 Paper 的 {@code /reload <name>}），不触碰其他插件。
+     * <p>
+     * 流程对齐 {@link #reloadPlugins()} 的单插件版：先保存全部配置 → 完整卸载该插件（
+     * {@code onDisable} 只一次、取消调度任务、清理事件/服务/配置、关闭 ClassLoader）→
+     * 只清空该插件登记的命令 → 用原 jar 重新 {@link #loadPlugin}（重新 {@code onLoad}、
+     * 登记命令、注入配置/服务/文本/调度器等）→ 重新注册命令 → 重新启用该插件。
+     * <p>
+     * 全程服务端线程执行；任一环节失败仅记录日志，不影响其他插件与服务器稳定性。
+     *
+     * @param name 要重载的插件名
+     * @return 重载并重新启用成功返回 {@code true}；插件不存在或过程中失败返回 {@code false}
+     */
+    public boolean reloadPlugin(String name) {
+        if (name == null || !plugins.containsKey(name)) {
+            LOGGER.error("Cannot reload plugin '{}': not loaded.", name);
+            return false;
+        }
+        File jar = jarSourceOf(name);
+        if (jar == null) {
+            LOGGER.error("Cannot reload plugin '{}': no jar source known.", name);
+            return false;
+        }
+        LOGGER.info("Akia: reloading plugin '{}'...", name);
+
+        // 0. 保存配置，避免卸载后未保存的改动丢失（与全量 reloadPlugins 一致）
+        configManager.saveAllConfigs();
+
+        // 已启用则先卸载以触发 onDisable；未启用（仅加载未启用）也要卸载，重载后统一走 enable
+        unloadPlugin(name);
+
+        // 只清该插件的命令，其余插件命令不受影响
+        commandRegistry.clearPluginCommands(name);
+
+        try {
+            // 重新加载（onLoad + registerCommands + 重新注入各类钩子）
+            if (!loadPlugin(jar)) {
+                LOGGER.error("Failed to reload plugin '{}'.", name);
+                return false;
+            }
+            // 注册命令（幂等，RegisterCommandsEvent 不会再次触发，需手动调用）
+            commandRegistry.registerAllCommands();
+            // 重新启用
+            return enablePlugin(name);
+        } catch (Throwable t) {
+            LOGGER.error("Failed to reload plugin '{}': {}", name, t.toString(), t);
+            return false;
+        }
+    }
+
+    /** 按插件名取回其来源 JAR 文件；插件不存在返回 {@code null}。 */
+    private File jarSourceOf(String name) {
+        PluginEntry entry = plugins.get(name);
+        return entry == null ? null : entry.jarSource();
+    }
+
+    /**
      * {@inheritDoc}
      * <p>
      * 按 {@code loadOrder}（依赖拓扑序，依赖者靠后）逐个启用。必须用拓扑序而非
@@ -423,11 +479,12 @@ public class PluginManagerImpl implements PluginManager {
     /**
      * 一个已加载插件的内部运行态：
      *
-     * @param plugin 插件主类实例
-     * @param info   插件元数据
-     * @param loader 专属类加载器，用于加载/卸载该插件的类
+     * @param plugin    插件主类实例
+     * @param info      插件元数据
+     * @param loader    专属类加载器，用于加载/卸载该插件的类
+     * @param jarSource 该插件来源的 JAR 文件，供单项重载时按名找回 jar 重新加载
      */
-    private record PluginEntry(AkiPlugin plugin, PluginInfo info, AkiPluginClassLoader loader) {
+    private record PluginEntry(AkiPlugin plugin, PluginInfo info, AkiPluginClassLoader loader, File jarSource) {
     }
 
     /** 空构造器。 */
@@ -477,13 +534,19 @@ public class PluginManagerImpl implements PluginManager {
             plugin.onLoad();
             eventBus.registerEvents(plugin, plugin);   // 自动注册插件主类上的 @EventHandler 方法
             plugin.registerEvents(eventBus);           // 插件自定义事件注册钩子（默认空实现）
-            plugin.registerCommands(commandRegistry);  // 插件命令注册钩子（默认空实现）
+            // 在插件登记命令期间标记命令归属，使单项重载可精确清理该插件的命令
+            commandRegistry.setCurrentOwner(info.name());
+            try {
+                plugin.registerCommands(commandRegistry);  // 插件命令注册钩子（默认空实现）
+            } finally {
+                commandRegistry.clearCurrentOwner();
+            }
             plugin.registerScheduler(scheduler);       // 插件调度器注册钩子（默认空实现）
             plugin.registerConfig(configManager.getConfig(plugin)); // 插件配置文件注入（默认空实现）
             plugin.registerPersistence(persistenceContext);        // 插件 PDC 适配上下文注入（默认空实现）
             plugin.registerText(AkiText.INSTANCE);                 // 插件文本组件工具注入（默认空实现）
             plugin.registerServices(serviceRegistry);              // 插件服务注册表注入（默认空实现）
-            plugins.put(info.name(), new PluginEntry(plugin, info, loader));
+            plugins.put(info.name(), new PluginEntry(plugin, info, loader, jarFile));
             loadOrder.add(info.name());
 
             LOGGER.info("Plugin '{}' v{} loaded from {}.", info.name(), info.version(), jarFile.getName());
