@@ -53,6 +53,9 @@ public final class CommandRegistry {
     /** 命令名（不含 '/'）→ 命令实现。 */
     private final ConcurrentMap<String, CommandEntry> commands = new ConcurrentHashMap<>();
 
+    /** 命令名（不含 '/'）→ 多级子命令树构建器（{@code registerNode} 登记的命令为真正多级 literal 树）。 */
+    private final ConcurrentMap<String, NodeBuilder> nodeCommands = new ConcurrentHashMap<>();
+
     /** 最近一次收到 {@link RegisterCommandsEvent} 时的命令调度器；用于热重载时移除并重挂命令。 */
     private volatile CommandDispatcher<CommandSourceStack> dispatcher;
 
@@ -314,6 +317,62 @@ public final class CommandRegistry {
     }
 
     /**
+     * 登记一条<b>多级子命令树</b>命令（真正用 Brigadier literal 构建的层级命令），权限用默认值。
+     * <p>
+     * 返回 {@link NodeBuilder}，可链式用 {@code sub}/{@code child}/{@code suggest}/{@code executes}
+     * 构建多层子命令与每层的 Tab 补全，让 vanilla 客户端按输入 token 自动过滤与隐藏候选、
+     * 选完子命令后空格只剩下一层的候选。适合 {@code /cmd <子命令> [选项] } 这类层级命令。
+     * <p>
+     * 与 {@link #register}/{@link #registerArgument} 系列互斥：同一命令名已在另一边登记时拒绝。
+     *
+     * @param name 命令名（可带或不带开头的 {@code /}）
+     * @return 命令树构建器；命令名非法或重名（含与字面量命令重名）时返回一个不可用的 no-op 构建器
+     */
+    public NodeBuilder registerNode(String name) {
+        return registerNode(name, DEFAULT_PERMISSION_LEVEL, null);
+    }
+
+    /**
+     * 登记一条多级子命令树命令，并指定根命令的权限等级。
+     */
+    public NodeBuilder registerNode(String name, int permissionLevel) {
+        return registerNode(name, permissionLevel, null);
+    }
+
+    /**
+     * 登记一条多级子命令树命令，并指定根命令的<b>字符串权限节点</b>（等级用默认值）。
+     */
+    public NodeBuilder registerNode(String name, String permission) {
+        return registerNode(name, DEFAULT_PERMISSION_LEVEL, permission);
+    }
+
+    /**
+     * 登记一条多级子命令树命令，并同时指定根命令的权限等级与<b>字符串权限节点</b>。
+     */
+    public NodeBuilder registerNode(String name, int permissionLevel, String permission) {
+        String label = stripSlash(name);
+        NodeBuilder dead = new NodeBuilder(this, label, permissionLevel, permission);
+        if (label.isEmpty()) {
+            LOGGER.warn("Rejected invalid node command registration (name='{}').", label);
+            dead.markUnregisterable();
+            return dead;
+        }
+        if (commands.containsKey(label)) {
+            LOGGER.warn("Command '/{}' already registered as an argument command; rejected the node duplicate.", label);
+            dead.markUnregisterable();
+            return dead;
+        }
+        NodeBuilder previous = nodeCommands.putIfAbsent(label, dead);
+        if (previous != null) {
+            LOGGER.warn("Command '/{}' is already registered; rejected the duplicate.", label);
+            dead.markUnregisterable();
+            return dead;
+        }
+        LOGGER.info("Queued node command tree '/{}'.", label);
+        return dead;
+    }
+
+    /**
      * 当服务器加载命令时，保存 dispatcher 引用并注册所有已登记的插件命令。
      *
      * @param event NeoForge 命令注册事件
@@ -376,6 +435,28 @@ public final class CommandRegistry {
             existing.add(label);
             LOGGER.info("Registered plugin command '/{}'.", label);
         }
+
+        // 多级子命令树命令：以 build() 得到的完整 literal 树注册（含各层子命令与权限）
+        for (Map.Entry<String, NodeBuilder> e : nodeCommands.entrySet()) {
+            String label = e.getKey();
+            // 与 legacy 字面量命令（commands）占用同一名字时不重复注册
+            if (commands.containsKey(label)) {
+                continue;
+            }
+            if (existing.contains(label) && !registeredNames.contains(label)) {
+                LOGGER.warn("Command '/{}' already exists (vanilla or other plugin); skipped.", label);
+                continue;
+            }
+            d.getRoot().getChildren().removeIf(n -> n.getName().equals(label));
+            NodeBuilder nb = e.getValue();
+            if (!nb.isRegisterable()) {
+                continue;
+            }
+            d.register(nb.build());
+            registeredNames.add(label);
+            existing.add(label);
+            LOGGER.info("Registered plugin node command '/{}'.", label);
+        }
     }
 
     /**
@@ -393,6 +474,7 @@ public final class CommandRegistry {
         }
         registeredNames.clear();
         commands.clear();
+        nodeCommands.clear();
         LOGGER.info("Cleared all plugin commands.");
     }
 
@@ -407,7 +489,7 @@ public final class CommandRegistry {
      * 注意：未通过 {@code requires} 校验的使用者根本看不到也不触发该命令（Brigadier 行为），
      * 因此“非 OP 玩家被拦截”即由此保证。
      */
-    private static boolean checkPermissions(CommandSourceStack source, int permissionLevel, String permissionNode) {
+    static boolean checkPermissions(CommandSourceStack source, int permissionLevel, String permissionNode) {
         if (permissionLevel > 0 && !source.hasPermission(permissionLevel)) {
             return false;
         }

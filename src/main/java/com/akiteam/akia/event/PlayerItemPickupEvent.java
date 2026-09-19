@@ -6,20 +6,23 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.event.entity.player.ItemEntityPickupEvent;
 
 /**
- * 插件事件：玩家拾取掉落物事件（{@code Pre} 阶段，捡起但尚未入包）。
+ * 插件事件：玩家拾取掉落物事件（{@code Post} 阶段，物品已实际进入背包）。
  * <p>
- * 由 {@link NeoForgeEventBridge} 收到 NeoForge 的 {@code ItemEntityPickupEvent.Pre} 时包装并分发。
+ * 由 {@link NeoForgeEventBridge} 收到 NeoForge 的 {@code ItemEntityPickupEvent.Post} 时包装并分发。
+ * 对齐 Paper 的 {@code PlayerPickupItemEvent}/{@code EntityPickupItemEvent}：
+ * 只有物品真正入包才触发。若只需关注"拾取尝试/尚未入包"，用
+ * {@link PlayerAttemptPickupItemEvent}。
  */
 public final class PlayerItemPickupEvent implements Event {
 
-    private final ItemEntityPickupEvent.Pre neoEvent;
+    private final ItemEntityPickupEvent.Post neoEvent;
 
-    public PlayerItemPickupEvent(ItemEntityPickupEvent.Pre neoEvent) {
+    public PlayerItemPickupEvent(ItemEntityPickupEvent.Post neoEvent) {
         this.neoEvent = neoEvent;
     }
 
     /** 返回被包装的 NeoForge 原生事件。 */
-    public ItemEntityPickupEvent.Pre getNeoEvent() {
+    public ItemEntityPickupEvent.Post getNeoEvent() {
         return neoEvent;
     }
 
@@ -33,8 +36,9 @@ public final class PlayerItemPickupEvent implements Event {
         return neoEvent.getItemEntity();
     }
 
-    /** 返回本次拾取的物品堆。 */
+    /** 返回本次实际拾取到的物品堆（拾取前掉落物上的堆，Post 阶段实体已被清空，故回退读 originalStack）。 */
     public ItemStack getItem() {
-        return neoEvent.getItemEntity().getItem();
+        ItemStack original = neoEvent.getOriginalStack();
+        return original.isEmpty() ? neoEvent.getItemEntity().getItem() : original;
     }
 }

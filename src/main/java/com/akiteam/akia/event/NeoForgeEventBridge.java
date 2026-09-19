@@ -207,10 +207,22 @@ public final class NeoForgeEventBridge {
     }
 
     /**
-     * 玩家拾取掉落物事件 → {@link PlayerItemPickupEvent}。
+     * 玩家拾取掉落物事件（尝试穿透，尚未入包）→ {@link PlayerAttemptPickupItemEvent}。
+     * <p>对应 NeoForge {@code ItemEntityPickupEvent.Pre}，对齐 Paper 的
+     * {@code PlayerAttemptPickupItemEvent}：只要"可能被拾取"就触发，物品不一定真的入包。</p>
      */
     @SubscribeEvent
-    public void onPlayerItemPickup(ItemEntityPickupEvent.Pre event) {
+    public void onPlayerAttemptPickup(ItemEntityPickupEvent.Pre event) {
+        safe(() -> eventBus.fireEvent(new PlayerAttemptPickupItemEvent(event)));
+    }
+
+    /**
+     * 玩家拾取掉落物事件（已实际入包）→ {@link PlayerItemPickupEvent}。
+     * <p>对应 NeoForge {@code ItemEntityPickupEvent.Post}，对齐 Paper 的
+     * {@code PlayerPickupItemEvent}/{@code EntityPickupItemEvent}：物品真正进入背包后才触发。</p>
+     */
+    @SubscribeEvent
+    public void onPlayerItemPickup(ItemEntityPickupEvent.Post event) {
         safe(() -> eventBus.fireEvent(new PlayerItemPickupEvent(event)));
     }
 
