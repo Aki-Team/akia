@@ -22,3 +22,13 @@ run/
 # 本地测试插件的 JAR（源码在 src 中，编译产物不提交）
 **/*.jar
 !build.gradle
+
+# 临时/工具/交接文档（不进入版本控制）
+net/
+rcon_client.py
+CONTEXT_HANDOFF_2026-09-19.md
+WRITER_AI_MEMORY.md
+Akia 项目交接文档（策略评估 Agent 专用）.md
+
+# 测试插件（不进入版本仓库，仅框架本体入库；测试插件源码另置仓库/文档站）
+test-plugins/
