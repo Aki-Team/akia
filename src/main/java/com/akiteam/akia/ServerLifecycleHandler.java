@@ -138,6 +138,11 @@ public final class ServerLifecycleHandler {
         source.sendSuccess(() -> Component.literal("Reloading Akia plugins..."), true);
         try {
             int[] result = Akia.getPluginManager().reloadPlugins();
+            // 热重载只在服务器端重注册插件命令，不会自动把更新后的命令树推送给在线玩家，
+            // 导致客户端 Tab 补全 / 参数提示仍沿用旧定义（命令虽能执行却无法补全、报参数错误）。
+            // 这里手动把磁盘上最新的命令树重新下发给所有在线玩家，使 Tab 补全即时生效。
+            source.getServer().getPlayerList().getPlayers()
+                    .forEach(p -> source.getServer().getCommands().sendCommands(p));
             source.sendSuccess(() -> Component.literal(
                     "Akia plugins reloaded. " + result[0] + " enabled, " + result[1] + " failed."), true);
         } catch (Throwable t) {
