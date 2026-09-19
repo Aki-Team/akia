@@ -6,7 +6,6 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
@@ -162,8 +161,14 @@ public final class Player {
 
     // ---------- 暂返原生（后续任务再包装） ----------
 
+    /**
+     * 玩家的随身背包（包装为 {@link Inventory}，底层为原生
+     * {@link net.minecraft.world.entity.player.Inventory}）。
+     * <p>
+     * 若要原生逃生类型请用 {@link Inventory#getHandle()}。
+     */
     public Inventory getInventory() {
-        return handle.getInventory();
+        return new Inventory(handle.getInventory());
     }
 
     public ItemStack getMainHandItem() {
