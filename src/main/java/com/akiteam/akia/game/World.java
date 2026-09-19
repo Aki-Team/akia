@@ -112,6 +112,11 @@ public final class World {
         return getBlockAt(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
     }
 
+    /** 直接取自世界的记分板（服务端记分板，自动广播给所有在线玩家）。 */
+    public Scoreboard getScoreboard() {
+        return new Scoreboard(handle.getScoreboard());
+    }
+
     /** 直接从世界取到某个 {@link ServerLevel} 的包装。 */
     public static World from(ServerLevel level) {
         return new World(level);
