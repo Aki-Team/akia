@@ -4,11 +4,8 @@ out/
 *.class
 *.jar
 
-# Gradle 缓存
+# Gradle 缓存（注意：Gradle Wrapper script + jar 必须提交，不能忽略）
 .gradle/
-gradle/wrapper/gradle-wrapper.jar
-gradlew
-gradlew.bat
 
 # 运行环境（服务器数据、日志、配置、插件）
 run/
@@ -22,6 +19,7 @@ run/
 # 本地测试插件的 JAR（源码在 src 中，编译产物不提交）
 **/*.jar
 !build.gradle
+!gradle/wrapper/gradle-wrapper.jar
 
 # 临时/工具/交接文档（不进入版本控制）
 net/
